@@ -49,7 +49,10 @@ function _render(container) {
 
   container.innerHTML = `
     <div class="report-section debug-tab" id="section-debug">
-      <h3 class="section-heading">Debug — Parser &amp; Report Population</h3>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3 class="section-heading" style="margin:0;">Debug — Parser &amp; Report Population</h3>
+        <span style="font-size: 10px; color: #888;">ver.02-04-26 time 01.36</span>
+      </div>
 
       ${parsed ? _reportSummaryCard(parsed) : _noFileCard()}
       ${parsed ? _staleApprovalCard(parsed) : ''}

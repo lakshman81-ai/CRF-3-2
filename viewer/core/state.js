@@ -55,6 +55,85 @@ export const state = {
   },
 };
 
+const defaultViewer3DSettings = {
+  // Camera
+  cameraMode: '3d-orbit',
+  projection: 'perspective',
+  fov: 60,
+  nearPlane: 0.1,
+  farPlane: 1000000,
+  rotateSpeed: 1.0,
+  panSpeed: 1.0,
+  zoomSpeed: 1.0,
+  dampingFactor: 0.08,
+  invertX: false,
+  invertY: false,
+  zoomToCursor: true,
+  autoNearFar: true,
+
+  // Axis
+  axisConvention: 'Z-up',
+  upAxis: 'Z',
+  northAxis: 'Y',
+  eastAxis: 'X',
+  showAxisGizmo: true,
+  gizmoSize: 80,
+  gizmoPosition: 'bottom-left',
+
+  // View Cube
+  showViewCube: true,
+  viewCubeSize: 120,
+  viewCubePosition: 'top-right',
+  viewCubeOpacity: 0.85,
+  viewCubeAnimDuration: 400,
+
+  // Labels
+  showLabels: true,
+  labelMode: 'smart-density',
+  labelDensity: 0.5,
+  labelFontSize: 12,
+  labelBackground: true,
+  labelLeaderLines: true,
+  labelCollisionMode: 'hide',
+  labelPinning: false,
+  labelPrecision: 2,
+
+  // Restraints
+  showRestraints: true,
+  showOnlySelectedRestraints: false,
+  showActiveRestraints: false,
+  showRestraintNames: true,
+  showRestraintGUIDs: false,
+  restraintSymbolScale: 1.0,
+  filterSupportType: 'all',
+  highlightFiredState: true,
+
+  // Section
+  sectionEnabled: false,
+  sectionAxis: 'X',
+  sectionOffset: 0,
+  sectionCap: true,
+  clipIntersection: false,
+
+  // Appearance
+  themePreset: 'IsoTheme',
+  renderStyle: 'iso',
+  backgroundColor: '#1A1A2E',
+  antialias: true,
+  showGrid: true,
+  showLegend: true,
+
+  // Selection
+  showTransparency: false,
+  selectionColor: '#FFA500',
+  hoverColor: '#88CCFF',
+
+  // Properties
+  showProperties: true,
+  propertyGroups: 'all',
+};
+
+
 export function resetParsedState() {
   state.rawText = null;
   state.fileName = null;
@@ -68,13 +147,26 @@ export function resetParsedState() {
 
 /** Retrieve overrides from localStorage */
 export function loadStickyState() {
+  state.sticky.viewer3d = { ...defaultViewer3DSettings };
   try {
     const saved = localStorage.getItem('concise-viewer-sticky');
     if (saved) {
       const parsed = JSON.parse(saved);
+
+      // Handle deeply nested viewer3d object merge safely
+      if (parsed.viewer3d) {
+          Object.assign(state.sticky.viewer3d, parsed.viewer3d);
+          delete parsed.viewer3d;
+      }
       Object.assign(state.sticky, parsed);
     }
   } catch(e) {}
+}
+
+export function updateViewer3DSettings(newSettings) {
+  Object.assign(state.sticky.viewer3d, newSettings);
+  saveStickyState();
+  import('./event-bus.js').then(({ emit }) => emit('viewer3d-settings-changed', state.sticky.viewer3d));
 }
 
 /** Save overrides to localStorage */

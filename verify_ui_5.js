@@ -16,39 +16,32 @@ const fs = require('fs');
   await page.waitForTimeout(1000);
 
   console.log("Loading sample...");
-  const fileInput = await page.$('#accdb-file-input');
-  if (fileInput) {
-      await fileInput.setInputFiles('SAMPLE2.ACCDB');
-      await page.waitForTimeout(3000);
-  } else {
-     // Inject dummy input for drop test if needed
-     await page.evaluate(() => {
-         const input = document.createElement('input');
-         input.type = 'file';
-         input.id = 'test-file-input';
-         input.style.display = 'none';
-         document.body.appendChild(input);
-         input.addEventListener('change', e => {
-             const file = e.target.files[0];
-             if (file) {
-                 const dropEvent = new Event('drop', { bubbles: true });
-                 dropEvent.dataTransfer = { files: [file] };
-                 document.dispatchEvent(dropEvent);
-             }
-         });
-     });
-     const dropInput = await page.$('#test-file-input');
-     if (dropInput) {
-        await dropInput.setInputFiles('SAMPLE2.ACCDB');
-        await page.waitForTimeout(3000);
-     }
-  }
+  await page.evaluate(() => {
+        // Just create some dummy data and trigger the event to show UI
+        const dummyData = {
+           format: 'XML',
+           elements: [{from: 1, to: 2, length: 100, od: 100, dx: 100, dy: 0, dz: 0, fromPos: {x:0, y:0, z:0}, toPos: {x:100, y:0, z:0}}],
+           nodes: {1: {x:0, y:0, z:0}, 2: {x:100, y:0, z:0}},
+           restraints: [{node: 1, type: 'ANCHOR', isAnchor: true}]
+        };
+        window.__test_data = dummyData;
+    });
 
   const geo_tab_btn = page.locator(".tab-btn[data-tab='geometry']");
   if (await geo_tab_btn.count() > 0 && await geo_tab_btn.isVisible()) {
       await geo_tab_btn.click();
       await page.waitForTimeout(1500);
   }
+
+  await page.evaluate(() => {
+      import('./core/state.js').then(m => {
+          m.state.parsed = window.__test_data;
+          import('./core/event-bus.js').then(eb => {
+              eb.emit('parse-complete', window.__test_data);
+          });
+      });
+  });
+  await page.waitForTimeout(1000);
 
   console.log("Opening settings drawer...");
   const settings_btn = page.locator("#geo-settings-btn");
