@@ -5,7 +5,6 @@
 import { state } from '../core/state.js';
 import { unitSuffix } from '../utils/formatter.js';
 import { emit, on } from '../core/event-bus.js';
-import { initViewerSettingsDrawer, openSettingsDrawer } from '../geometry/viewer-settings.js';
 
 // Inline legend colours — avoids static Three.js import at module load time
 const OD_COLORS = [
@@ -29,7 +28,6 @@ export async function renderGeometry(container) {
         <button class="btn-secondary" id="geo-reset-btn">⟳ Reset View</button>
         <button class="btn-secondary" id="geo-center-btn" title="Auto Center">⌖</button>
         <button class="btn-secondary" id="geo-proj-btn" title="Toggle Orthographic / Perspective">📽</button>
-        <button class="btn-secondary" id="geo-settings-btn" title="Settings">⚙️</button>
 
         <span class="control-sep"></span>
 
@@ -94,8 +92,6 @@ export async function renderGeometry(container) {
     </div>
   `;
 
-  initViewerSettingsDrawer(container.querySelector('.geo-tab'));
-  import('../geometry/property-panel.js').then(m => m.initPropertyPanel(container.querySelector('.geo-tab')));
   _wireControls(container);
 
   // Always init renderer, so Axis Gizmo is ready, even if no data yet.
@@ -160,10 +156,6 @@ function _wireControls(container) {
 
   container.querySelector('#geo-proj-btn')?.addEventListener('click', () => {
     _renderer?.toggleProjection();
-  });
-
-  container.querySelector('#geo-settings-btn')?.addEventListener('click', () => {
-      openSettingsDrawer();
   });
 
   container.querySelector('#legend-select')?.addEventListener('change', e => {

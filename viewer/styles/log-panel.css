@@ -1,0 +1,93 @@
+/* Log Panel Styles */
+#log-panel-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #f8f9fa;
+  border-top: 1px solid #ccc;
+  z-index: 1000;
+  font-family: sans-serif;
+  display: flex;
+  flex-direction: column;
+  transition: height 0.2s ease-in-out;
+}
+
+.log-panel-collapsed {
+  height: 36px;
+}
+
+.log-panel-expanded {
+  height: 30vh;
+  min-height: 200px;
+}
+
+.log-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 12px;
+  height: 36px;
+  box-sizing: border-box;
+  background: #e9ecef;
+  border-bottom: 1px solid #ccc;
+}
+
+.log-panel-summary {
+  display: flex;
+  gap: 8px;
+}
+
+.log-badge {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: bold;
+  color: white;
+}
+
+.log-badge.err { background: #dc3545; }
+.log-badge.warn { background: #fd7e14; }
+.log-badge.info { background: #0d6efd; }
+
+.log-panel-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.log-panel-filters {
+  padding: 8px 12px;
+  border-bottom: 1px solid #ddd;
+  background: #fff;
+}
+
+.log-search-input {
+  width: 100%;
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.log-list-container {
+  flex: 1;
+  overflow-y: auto;
+  background: #fff;
+}
+
+.log-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.log-table th, .log-table td {
+  padding: 6px 12px;
+  border-bottom: 1px solid #eee;
+  text-align: left;
+}
+
+.log-row-err td { color: #dc3545; }
+.log-row-warn td { color: #fd7e14; }
+.log-row-info td { color: #333; }

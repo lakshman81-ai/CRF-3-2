@@ -31,42 +31,6 @@ export class IsometricRenderer {
     on('parse-complete', () => this.rebuild());
     on('geo-toggle',     () => this._applyToggles());
     on('legend-changed', () => this._rebuildAll());
-    on('viewer3d-settings-changed', (s) => this._applySettings(s));
-  }
-
-  _applySettings(s) {
-      if ((s.projection === 'orthographic') !== this._isOrtho) {
-          this.toggleProjection();
-      }
-      this._perspCamera.fov = s.fov;
-      this._perspCamera.near = Math.max(1e-4, s.nearPlane);
-      this._perspCamera.far = s.farPlane;
-      this._perspCamera.updateProjectionMatrix();
-
-      this._controls.enableDamping = s.dampingFactor > 0;
-      this._controls.dampingFactor = s.dampingFactor;
-      this._controls.rotateSpeed = s.rotateSpeed;
-      this._controls.panSpeed = s.panSpeed;
-      this._controls.zoomSpeed = s.zoomSpeed;
-
-      this._applyAxisConvention(s.axisConvention);
-      this._applyToggles(); // Re-apply visibility settings if needed
-  }
-
-  _applyAxisConvention(convention) {
-      if (convention === 'Z-up') {
-          // Z-up: Rotate world so Z becomes up. Camera up is (0,0,1).
-          this._sceneRoot.rotation.x = -Math.PI / 2;
-          this._camera.up.set(0, 0, 1);
-      } else {
-          // Y-up: Native Three.js.
-          this._sceneRoot.rotation.x = 0;
-          this._camera.up.set(0, 1, 0);
-      }
-      this._camera.updateProjectionMatrix();
-      if (this._controls) {
-         this._controls.update();
-      }
   }
 
   _init() {
@@ -74,8 +38,6 @@ export class IsometricRenderer {
     const h = this._container.clientHeight || 500;
 
     this._scene = new THREE.Scene();
-    this._sceneRoot = new THREE.Group();
-    this._scene.add(this._sceneRoot);
     this._scene.background = new THREE.Color(0xffffff);
 
     const aspect = w / h;
@@ -84,15 +46,12 @@ export class IsometricRenderer {
     this._orthoCamera = new THREE.OrthographicCamera(
       -frustum * aspect, frustum * aspect,
       frustum, -frustum,
-      -100000, 1000000
+      -50000, 50000
     );
+    this._perspCamera = new THREE.PerspectiveCamera(45, aspect, 1, 100000);
 
-    // Apply default fov, near, far from settings
-    const s = state.sticky.viewer3d;
-    this._perspCamera = new THREE.PerspectiveCamera(s.fov, aspect, Math.max(1e-4, s.nearPlane), s.farPlane);
-
-    this._isOrtho = (s.projection === 'orthographic');
-    this._camera = this._isOrtho ? this._orthoCamera : this._perspCamera;
+    this._isOrtho = true;
+    this._camera = this._orthoCamera;
 
     this._orthoCamera.up.set(0, 1, 0);
     this._perspCamera.up.set(0, 1, 0);
@@ -117,12 +76,11 @@ export class IsometricRenderer {
     this._container.appendChild(this._css2d.domElement);
 
     this._controls = new OrbitControls(this._camera, this._renderer.domElement);
-    this._controls.enableDamping = s.dampingFactor > 0;
-    this._controls.dampingFactor = s.dampingFactor;
-    this._controls.rotateSpeed = s.rotateSpeed;
-    this._controls.panSpeed = s.panSpeed;
-    this._controls.zoomSpeed = s.zoomSpeed;
-
+    this._controls.enableDamping = true;
+    this._controls.dampingFactor = 0.08;
+    this._controls.rotateSpeed = 1.4;
+    this._controls.panSpeed = 1.2;
+    this._controls.zoomSpeed = 1.2;
     this._controls.addEventListener('change', () => {
       if (this._pipeGroup && this._isOrtho) {
         const box = new THREE.Box3().setFromObject(this._pipeGroup);
@@ -136,12 +94,10 @@ export class IsometricRenderer {
       }
     });
 
-    this._sceneRoot.add(this._pipeGroup, this._symbolGroup, this._labelGroup);
+    this._scene.add(this._pipeGroup, this._symbolGroup, this._labelGroup);
 
     const ro = new ResizeObserver(() => this._onResize());
     ro.observe(this._container);
-
-    this._applyAxisConvention(state.sticky.viewer3d.axisConvention);
 
     this._buildNavOverlay();
     this._buildViewCube();
@@ -443,20 +399,12 @@ export class IsometricRenderer {
     if (this._pipeGroup) box.setFromObject(this._pipeGroup);
     const centre = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
     const size = box.isEmpty() ? 5000 : Math.max(...box.getSize(new THREE.Vector3()).toArray()) * 1.5;
-
-    // Rotate the intended snap offset by the scene root's rotation
-    // so that "Plan" means "look down the current Z or Y axis depending on convention".
-    const offset = new THREE.Vector3(cx, cy, cz).multiplyScalar(size);
-    const up = new THREE.Vector3(ux, uy, uz);
-
-    if (state.sticky.viewer3d.axisConvention === 'Z-up') {
-        const qRoot = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0), -Math.PI/2);
-        offset.applyQuaternion(qRoot);
-        up.applyQuaternion(qRoot);
-    }
-
-    this._camera.position.copy(centre).add(offset);
-    this._camera.up.copy(up);
+    this._camera.position.set(
+      centre.x + cx * size,
+      centre.y + cy * size,
+      centre.z + cz * size
+    );
+    this._camera.up.set(ux, uy, uz);
     this._camera.lookAt(centre);
     this._camera.updateProjectionMatrix();
     this._controls.target.copy(centre);
@@ -464,25 +412,10 @@ export class IsometricRenderer {
   }
 
   _syncViewCube() {
-    if (!this._viewCubeEl || !this._camera) return;
-    if (!state.sticky.viewer3d.showViewCube) {
-        this._viewCubeEl.style.display = 'none';
-        return;
-    }
-    this._viewCubeEl.style.display = '';
-
-    if (!this._viewCubeInner) return;
-
-    // ViewCube needs to rotate relative to the scene root
-    const qCam = this._camera.quaternion.clone();
-
-    if (state.sticky.viewer3d.axisConvention === 'Z-up') {
-        const qRoot = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0), -Math.PI/2);
-        qCam.multiply(qRoot.invert());
-    }
-
+    if (!this._viewCubeInner || !this._camera) return;
+    const q = this._camera.quaternion;
     this._viewCubeInner.style.transform =
-      `matrix3d(${new THREE.Matrix4().makeRotationFromQuaternion(qCam.invert()).elements.join(',')})`;
+      `matrix3d(${new THREE.Matrix4().makeRotationFromQuaternion(q.clone().invert()).elements.join(',')})`;
   }
 
   _buildAxisGizmo() {
@@ -513,11 +446,6 @@ export class IsometricRenderer {
     if (!ctx || !this._camera) return;
     const W = 120, H = 120, cx = W / 2, cy = H / 2, len = 42;
 
-    if (!state.sticky.viewer3d.showAxisGizmo) {
-        ctx.clearRect(0, 0, W, H);
-        return;
-    }
-
     ctx.clearRect(0, 0, W, H);
 
     // Background circle
@@ -528,40 +456,20 @@ export class IsometricRenderer {
     ctx.fill();
     ctx.restore();
 
-    const isZUp = state.sticky.viewer3d.axisConvention === 'Z-up';
-
-    let AXES;
-    if (isZUp) {
-         // Scene is rotated -90 around X.
-         // Real World Z is now pointing along ThreeJS -Y
-         AXES = [
-            { dir: new THREE.Vector3(1, 0, 0),  color: '#33cc33', neg: '#226622', label: 'Y' }, // North
-            { dir: new THREE.Vector3(0, 1, 0),  color: '#3388ff', neg: '#224488', label: 'Z' }, // Up (In Three.js Space after rotation this points "Up")
-            { dir: new THREE.Vector3(0, 0, 1),  color: '#ff3333', neg: '#882222', label: 'X' }, // East
-        ];
-    } else {
-        AXES = [
-            { dir: new THREE.Vector3(1, 0, 0),  color: '#ff3333', neg: '#882222', label: 'X' },
-            { dir: new THREE.Vector3(0, 1, 0),  color: '#33cc33', neg: '#226622', label: 'Y' },
-            { dir: new THREE.Vector3(0, 0, 1),  color: '#3388ff', neg: '#224488', label: 'Z' },
-        ];
-    }
-
+    // CAESAR axis labels mapped to Three.js directions:
+    //   Three.js +X = CAESAR North (Y)  → green  → label "Y"
+    //   Three.js +Y = CAESAR Up    (Z)  → blue   → label "Z"
+    //   Three.js +Z = CAESAR East  (X)  → red    → label "X"
+    const AXES = [
+      { dir: new THREE.Vector3(1, 0, 0),  color: '#33cc33', neg: '#226622', label: 'Y' }, // CAESAR Y (North)
+      { dir: new THREE.Vector3(0, 1, 0),  color: '#3388ff', neg: '#224488', label: 'Z' }, // CAESAR Z (Up)
+      { dir: new THREE.Vector3(0, 0, 1),  color: '#ff3333', neg: '#882222', label: 'X' }, // CAESAR X (East)
+    ];
 
     // Project all axes and sort back-to-front (draw behind first)
-    // Important: we need to apply the scene root's rotation to the axis direction
-    // before applying the camera's quaternion.
     const projected = AXES.map(({ dir, color, neg, label }) => {
-      // The gizmo is in camera space. The camera looks at the rotated scene.
-      // So we must rotate the standard basis vectors by the same rotation we apply to the scene.
-      const worldDir = dir.clone();
-      if (isZUp) {
-          worldDir.applyAxisAngle(new THREE.Vector3(1,0,0), -Math.PI / 2);
-      }
-
-      const proj = worldDir.applyQuaternion(this._camera.quaternion.clone().invert());
-      // Invert Y projection because canvas Y is down, ThreeJS Y is up
-      return { proj: new THREE.Vector3(proj.x, -proj.y, proj.z), color, neg, label, depth: proj.z };
+      const proj = dir.clone().applyQuaternion(this._camera.quaternion);
+      return { proj, color, neg, label, depth: proj.z };
     });
     projected.sort((a, b) => b.depth - a.depth); // highest z = most behind = draw first
 
@@ -572,7 +480,7 @@ export class IsometricRenderer {
       const tipR  = isFront ? 5 : 3;
 
       const ex = cx + proj.x * len;
-      const ey = cy + proj.y * len; // proj.y is already inverted
+      const ey = cy - proj.y * len;
       const axColor = isFront ? color : neg;
 
       ctx.save();
@@ -674,29 +582,18 @@ export class IsometricRenderer {
       const h = this._container.clientHeight;
       const aspect = w / h;
 
-      const dist = this._camera.position.distanceTo(this._controls.target);
-
       if (this._isOrtho) {
           this._perspCamera.position.copy(this._orthoCamera.position);
           this._perspCamera.quaternion.copy(this._orthoCamera.quaternion);
-          this._perspCamera.up.copy(this._orthoCamera.up);
+          this._perspCamera.up.set(0, 1, 0);
           this._perspCamera.aspect = aspect;
           this._perspCamera.updateProjectionMatrix();
           this._camera = this._perspCamera;
           this._isOrtho = false;
       } else {
-          // Match ortho frustum height to perspective visible height at target dist
-          const fovRad = THREE.MathUtils.degToRad(this._perspCamera.fov);
-          const orthoHalfHeight = Math.tan(fovRad / 2) * dist;
-
-          this._orthoCamera.left = -orthoHalfHeight * aspect;
-          this._orthoCamera.right = orthoHalfHeight * aspect;
-          this._orthoCamera.top = orthoHalfHeight;
-          this._orthoCamera.bottom = -orthoHalfHeight;
-
           this._orthoCamera.position.copy(this._perspCamera.position);
           this._orthoCamera.quaternion.copy(this._perspCamera.quaternion);
-          this._orthoCamera.up.copy(this._perspCamera.up);
+          this._orthoCamera.up.set(0, 1, 0);
           this._orthoCamera.updateProjectionMatrix();
           this._camera = this._orthoCamera;
           this._isOrtho = true;
@@ -919,48 +816,19 @@ export class IsometricRenderer {
     box.getSize(size);
 
     const maxDim = Math.max(size.x, size.y, size.z);
+    const frustum = maxDim * 0.65;
     const aspect  = this._container.clientWidth / this._container.clientHeight;
-    const D = maxDim * 1.5;
+
+    this._camera.left   = -frustum * aspect;
+    this._camera.right  =  frustum * aspect;
+    this._camera.top    =  frustum;
+    this._camera.bottom = -frustum;
+    this._camera.updateProjectionMatrix();
 
     this._controls.target.copy(center);
-
-    // Auto-fit near/far if enabled
-    if (state.sticky.viewer3d.autoNearFar) {
-       this._autoFitNearFar(center, maxDim);
-    }
-
-    if (this._isOrtho) {
-        const frustum = maxDim * 0.65;
-        this._orthoCamera.left   = -frustum * aspect;
-        this._orthoCamera.right  =  frustum * aspect;
-        this._orthoCamera.top    =  frustum;
-        this._orthoCamera.bottom = -frustum;
-        this._orthoCamera.updateProjectionMatrix();
-        this._camera.position.copy(center).add(new THREE.Vector3(D, D, D).normalize().multiplyScalar(D));
-    } else {
-        // Compute distance needed to fit bounding sphere into FOV
-        const radius = maxDim / 2;
-        const fov = this._perspCamera.fov * (Math.PI / 180);
-        let dist = radius / Math.sin(fov / 2);
-
-        // Adjust for aspect ratio if height is the constraint
-        if (aspect < 1) {
-             dist = dist / aspect;
-        }
-
-        this._camera.position.copy(center).add(new THREE.Vector3(1, 1, 1).normalize().multiplyScalar(dist));
-    }
-
+    const D = maxDim * 1.5;
+    this._camera.position.copy(center).add(new THREE.Vector3(D, D, D).normalize().multiplyScalar(D));
     this._controls.update();
-  }
-
-  _autoFitNearFar(targetCenter, maxDim) {
-      const dist = this._camera.position.distanceTo(targetCenter);
-      const radius = maxDim / 2;
-
-      this._camera.near = Math.max(1e-4, (dist - radius) * 0.1);
-      this._camera.far  = (dist + radius) * 10;
-      this._camera.updateProjectionMatrix();
   }
 
   resetView() { this._fitToScene(); }

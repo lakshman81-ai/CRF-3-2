@@ -12,6 +12,7 @@ import { renderStress }   from '../tabs/stress-tab.js';
 import { renderSupports } from '../tabs/supports-tab.js';
 import { renderNozzle }   from '../tabs/nozzle-tab.js';
 import { renderDebug }    from '../tabs/debug-tab.js';
+import { initLogPanel }   from './log-panel.js';
 
 const TABS = [
   { id: 'input',     label: 'Input Data',  render: renderInput    },
@@ -33,6 +34,7 @@ export function init() {
     _switchTab('input');
     _wirePrint();
     _wireFileLoad();
+    initLogPanel();
   });
 }
 
