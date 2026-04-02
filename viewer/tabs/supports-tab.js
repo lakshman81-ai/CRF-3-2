@@ -87,21 +87,21 @@ function _populateList(container, searchQuery, typeFilter) {
     });
 
     if (filtered.length === 0) {
-        tbody.innerHTML = \`<tr><td colspan="4" class="text-center" style="padding: 1rem;">No restraints found matching criteria.</td></tr>\`;
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center" style="padding: 1rem;">No restraints found matching criteria.</td></tr>`;
         return;
     }
 
     tbody.innerHTML = filtered.map(r => {
         const rClass = classifySupport(r.name || '', r.keywords || r.type || '');
-        const displayName = r.name ? \`\${r.name} (\${r.type})\` : r.type;
-        return \`
-            <tr data-node="\${r.node}">
-                <td>\${r.node}</td>
-                <td>\${displayName}</td>
-                <td><span class="badge badge-neutral">\${rClass}</span></td>
-                <td><button class="btn-secondary btn-navigate" data-node="\${r.node}">[→] Navigate</button></td>
+        const displayName = r.name ? `${r.name} (${r.type})` : r.type;
+        return `
+            <tr data-node="${r.node}">
+                <td>${r.node}</td>
+                <td>${displayName}</td>
+                <td><span class="badge badge-neutral">${rClass}</span></td>
+                <td><button class="btn-secondary btn-navigate" data-node="${r.node}">[→] Navigate</button></td>
             </tr>
-        \`;
+        `;
     }).join('');
 
     // Wire up navigation buttons

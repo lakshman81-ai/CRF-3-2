@@ -50,6 +50,7 @@ export class IsometricRenderer {
       this._controls.zoomSpeed = s.zoomSpeed;
 
       this._applyAxisConvention(s.axisConvention);
+      this._applyTheme();
       this._applyToggles(); // Re-apply visibility settings if needed
   }
 
@@ -77,6 +78,13 @@ export class IsometricRenderer {
     this._sceneRoot = new THREE.Group();
     this._scene.add(this._sceneRoot);
     this._scene.background = new THREE.Color(0xffffff);
+
+    // PCF-Fixer lighting
+    const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+    this._scene.add(ambient);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(1000, 2000, 1000);
+    this._scene.add(dirLight);
 
     const aspect = w / h;
     const frustum = 5000;
@@ -137,6 +145,12 @@ export class IsometricRenderer {
     });
 
     this._sceneRoot.add(this._pipeGroup, this._symbolGroup, this._labelGroup);
+
+    this._sectionBox = new SectionBox(this._sceneRoot, this._renderer, this._camera, this._controls, () => {
+        this._applyClipping();
+    });
+
+    this._setupSelection();
 
     const ro = new ResizeObserver(() => this._onResize());
     ro.observe(this._container);
@@ -308,6 +322,67 @@ export class IsometricRenderer {
     }
   }
 
+  _setupSelection() {
+      this._raycaster = new THREE.Raycaster();
+      this._mouse = new THREE.Vector2();
+      this._selectedMesh = null;
+
+      this._renderer.domElement.addEventListener('pointerdown', (e) => {
+          if (e.button !== 0 || this._navMode !== 'select') return;
+
+          const rect = this._renderer.domElement.getBoundingClientRect();
+          this._mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+          this._mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+          this._raycaster.setFromCamera(this._mouse, this._camera);
+
+          // Test pipe segments and symbols
+          const objectsToTest = [...this._pipeGroup.children, ...this._symbolGroup.children];
+          const intersects = this._raycaster.intersectObjects(objectsToTest, true);
+
+          if (this._selectedMesh) {
+              // Reset emissive safely, some meshes are groups
+              const resetEmissive = (obj) => {
+                  if (obj.material && obj.material.emissive) obj.material.emissive.setHex(0x000000);
+                  if (obj.children) obj.children.forEach(resetEmissive);
+              };
+              resetEmissive(this._selectedMesh);
+              this._selectedMesh = null;
+              import('./property-panel.js').then(m => m.updatePropertyPanel(null));
+          }
+
+          if (intersects.length > 0) {
+              // Walk up to find the root user data object if hit child of symbol group
+              let hit = intersects[0].object;
+              while (hit.parent && !hit.userData?.element && !hit.userData?.restraint && hit.parent !== this._sceneRoot) {
+                  hit = hit.parent;
+              }
+
+              if (!hit.userData?.element && !hit.userData?.restraint) {
+                  state.log.push({ level: 'WARN', msg: 'Selection failure: Geometry without mapped user data clicked.'});
+                  import('../core/event-bus.js').then(({ emit }) => emit('parse-complete')); // force log update
+              } else {
+                  this._selectedMesh = hit;
+
+                  // Apply emissive highlight
+                  const applyEmissive = (obj) => {
+                      if (obj.material && obj.material.emissive) obj.material.emissive.setHex(0x333333);
+                      if (obj.children) obj.children.forEach(applyEmissive);
+                  };
+                  applyEmissive(hit);
+
+                  import('./property-panel.js').then(m => {
+                      if (hit.userData?.element) {
+                          m.updatePropertyPanel(hit.userData.element, 'element');
+                      } else if (hit.userData?.restraint) {
+                          m.updatePropertyPanel(hit.userData.restraint, 'restraint');
+                      }
+                  });
+              }
+          }
+      });
+  }
+
   /**
    * Azimuth-only (Y-axis) orbit.
    *
@@ -328,6 +403,9 @@ export class IsometricRenderer {
    * isDown is only true for button === 0.
    */
   _startAzimuthOrbit() {
+    state.log.push({ level: 'INFO', msg: '2D Planar Orbit mode activated. Elevation locked.'});
+    import('../core/event-bus.js').then(({ emit }) => emit('parse-complete'));
+
     const canvas = this._renderer.domElement;
     let isDown   = false;
     let prevX    = 0;
@@ -442,11 +520,30 @@ export class IsometricRenderer {
     const box = new THREE.Box3();
     if (this._pipeGroup) box.setFromObject(this._pipeGroup);
     const centre = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
-    const size = box.isEmpty() ? 5000 : Math.max(...box.getSize(new THREE.Vector3()).toArray()) * 1.5;
+    const dist = this._isOrtho ? 10000 : 5000;
 
-    // Rotate the intended snap offset by the scene root's rotation
-    // so that "Plan" means "look down the current Z or Y axis depending on convention".
-    const offset = new THREE.Vector3(cx, cy, cz).multiplyScalar(size);
+    // PCF-Fixer style standard view logic
+    const viewType = this._inferViewTypeFromSnap(cx, cy, cz);
+
+    let cPos = new THREE.Vector3();
+    switch(viewType) {
+        case 'TOP': cPos.set(0, dist, 0); break;
+        case 'FRONT': cPos.set(0, 0, dist); break;
+        case 'RIGHT': cPos.set(dist, 0, 0); break;
+        case 'LEFT': cPos.set(-dist, 0, 0); break;
+        case 'BACK': cPos.set(0, 0, -dist); break;
+        case 'BOTTOM': cPos.set(0, -dist, 0); break;
+        case 'HOME':
+        case 'ISO': cPos.set(dist, dist, dist); break;
+        default:
+            cPos.set(cx * dist, cy * dist, cz * dist);
+            state.log.push({ level: 'INFO', msg: `Odd rotation angle mapped to XYZ [${cx.toFixed(2)}, ${cy.toFixed(2)}, ${cz.toFixed(2)}]`});
+            import('../core/event-bus.js').then(({ emit }) => emit('parse-complete')); // force log update
+            break;
+    }
+
+    // Convert logic back to our original rotation offset so Z-up remains working
+    const offset = cPos;
     const up = new THREE.Vector3(ux, uy, uz);
 
     if (state.sticky.viewer3d.axisConvention === 'Z-up') {
@@ -461,6 +558,20 @@ export class IsometricRenderer {
     this._camera.updateProjectionMatrix();
     this._controls.target.copy(centre);
     this._controls.update();
+
+    state.log.push({ level: 'INFO', msg: `Camera view changed to ${viewType}`});
+    import('../core/event-bus.js').then(({ emit }) => emit('parse-complete')); // force log update
+  }
+
+  _inferViewTypeFromSnap(cx, cy, cz) {
+      if (cx === 0 && cy === 1 && cz === 0) return 'TOP';
+      if (cx === 0 && cy === -1 && cz === 0) return 'BOTTOM';
+      if (cx === 0 && cy === 0 && cz === 1) return 'FRONT';
+      if (cx === 0 && cy === 0 && cz === -1) return 'BACK';
+      if (cx === 1 && cy === 0 && cz === 0) return 'RIGHT';
+      if (cx === -1 && cy === 0 && cz === 0) return 'LEFT';
+      if (Math.abs(cx) === 1 && Math.abs(cy) === 1 && Math.abs(cz) === 1) return 'ISO';
+      return 'HOME';
   }
 
   _syncViewCube() {
@@ -907,6 +1018,15 @@ export class IsometricRenderer {
   _applyToggles() {
     this._symbolGroup.visible = state.geoToggles.supports;
     this._rebuildLabels();
+  }
+
+  _applyTheme() {
+     const theme = state.sticky.viewer3d.themePreset || 'IsoTheme';
+     if (theme === 'IsoTheme') {
+        this._scene.background = new THREE.Color(0xffffff);
+     } else if (theme === '3DTheme') {
+        this._scene.background = new THREE.Color(0x1e293b); // PCF-Fixer dark blue/slate
+     }
   }
 
   _fitToScene() {
