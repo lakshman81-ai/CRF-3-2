@@ -123,9 +123,9 @@ export function buildSupportSymbol(pos, pipeAxis, od, type, color = GREEN_COLOR)
 }
 
 export function classifySupport(supportName, supportKeywords) {
-    const combined = \`\${supportName} \${supportKeywords}\`.toUpperCase();
+    const combined = `${supportName} ${supportKeywords}`.toUpperCase();
     if (combined.includes('GUI') || combined.includes('GUIDE')) return 'GUIDE';
-    if (/CA\\d+/i.test(supportName) || combined.includes('ANCH') || combined.includes('ANCHOR')) return 'ANCHOR';
+    if (/CA\d+/i.test(supportName) || combined.includes('ANCH') || combined.includes('ANCHOR')) return 'ANCHOR';
     if (combined.includes('STOP')) return 'STOP';
     if (combined.includes('SPRING') || combined.includes('HANGER')) return 'SPRING';
     if (combined.includes('RIGID')) return 'RIGID';
