@@ -47,16 +47,16 @@ export function updatePropertyPanel(data, type = 'element') {
                 { label: 'To Node', value: element.to }
             ],
             'Geometry': [
-                { label: \`Length\${unitSuffix(units.length)}\`, value: element.length?.toFixed(2) },
-                { label: \`OD\${unitSuffix(units.length)}\`, value: element.od?.toFixed(2) },
-                { label: \`Wall Thk\${unitSuffix(units.length)}\`, value: element.wall?.toFixed(3) },
-                { label: \`Insul Thk\${unitSuffix(units.length)}\`, value: element.insul?.toFixed(2) }
+                { label: `Length${unitSuffix(units.length)}`, value: element.length?.toFixed(2) },
+                { label: `OD${unitSuffix(units.length)}`, value: element.od?.toFixed(2) },
+                { label: `Wall Thk${unitSuffix(units.length)}`, value: element.wall?.toFixed(3) },
+                { label: `Insul Thk${unitSuffix(units.length)}`, value: element.insul?.toFixed(2) }
             ],
             'Process': [
-                { label: \`T1\${unitSuffix(units.temperature)}\`, value: element.T1 },
-                { label: \`T2\${unitSuffix(units.temperature)}\`, value: element.T2 },
-                { label: \`P1\${unitSuffix(units.pressure)}\`, value: element.P1 },
-                { label: \`Density\${unitSuffix(units.density)}\`, value: element.density }
+                { label: `T1${unitSuffix(units.temperature)}`, value: element.T1 },
+                { label: `T2${unitSuffix(units.temperature)}`, value: element.T2 },
+                { label: `P1${unitSuffix(units.pressure)}`, value: element.P1 },
+                { label: `Density${unitSuffix(units.density)}`, value: element.density }
             ],
             'Material': [
                 { label: 'Material', value: element.material },
@@ -64,7 +64,7 @@ export function updatePropertyPanel(data, type = 'element') {
                 { label: 'E Hot', value: element.E_hot }
             ]
         };
-        title.textContent = \`Node \${element.from} → \${element.to}\`;
+        title.textContent = `Node ${element.from} → ${element.to}`;
     } else if (type === 'restraint') {
         const restraint = data;
         groups = {
@@ -76,24 +76,24 @@ export function updatePropertyPanel(data, type = 'element') {
                 { label: 'Is Anchor', value: restraint.isAnchor ? 'Yes' : 'No' }
             ]
         };
-        title.textContent = \`Support at Node \${restraint.node}\`;
+        title.textContent = `Support at Node ${restraint.node}`;
     }
 
     let html = '';
     for (const [groupName, props] of Object.entries(groups)) {
-        html += \`<div class="prop-group">
-            <h4>\${groupName}</h4>
+        html += `<div class="prop-group">
+            <h4>${groupName}</h4>
             <table class="data-table prop-table">
                 <tbody>
-                    \${props.filter(p => p.value !== undefined && p.value !== null && p.value !== '').map(p => \`
+                    ${props.filter(p => p.value !== undefined && p.value !== null && p.value !== '').map(p => `
                         <tr>
-                            <td>\${p.label}</td>
-                            <td class="mono">\${p.value}</td>
+                            <td>${p.label}</td>
+                            <td class="mono">${p.value}</td>
                         </tr>
-                    \`).join('')}
+                    `).join('')}
                 </tbody>
             </table>
-        </div>\`;
+        </div>`;
     }
 
     content.innerHTML = html;
