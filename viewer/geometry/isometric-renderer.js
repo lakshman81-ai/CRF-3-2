@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { createPipeLine, createBendArc, colorForMode, OD_COLORS, toThree, generateDiscreteColor } from './pipe-geometry.js';
-import { createAnchorSymbol, createGuideSymbol, createForceArrow } from './symbols.js';
+import { buildSupportSymbol, classifySupport, createForceArrow } from './symbols.js';
 import { createNodeLabel, createSegmentLabel, computeStretches } from './labels.js';
 import { materialFromDensity } from '../utils/formatter.js';
 import { state } from '../core/state.js';
@@ -867,7 +867,21 @@ export class IsometricRenderer {
     for (const r of restraints) {
       const pos = nodes[r.node];
       if (!pos) continue;
-      const sym = r.isAnchor ? createAnchorSymbol(pos) : createGuideSymbol(pos);
+
+      // Determine pipe axis at this node (find connected element)
+      let pipeAxis = new THREE.Vector3(1, 0, 0); // Default fallback
+      let od = 100;
+      const connectedEl = elements.find(e => e.from === r.node || e.to === r.node);
+      if (connectedEl) {
+          const fromPos = new THREE.Vector3(connectedEl.fromPos.x, connectedEl.fromPos.y, connectedEl.fromPos.z);
+          const toPos = new THREE.Vector3(connectedEl.toPos.x, connectedEl.toPos.y, connectedEl.toPos.z);
+          pipeAxis = toPos.sub(fromPos).normalize();
+          od = connectedEl.od || 100;
+      }
+
+      const supportClass = classifySupport(r.name || r.type || '', r.keywords || '');
+      const sym = buildSupportSymbol(toThree(pos), pipeAxis, od, supportClass);
+      sym.userData = { restraint: r };
       this._symbolGroup.add(sym);
     }
 
